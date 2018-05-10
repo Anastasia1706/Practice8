@@ -1,0 +1,126 @@
+---
+title: "practice 8(doc)"
+author: "A.Lukyanova"
+date: '26 апреля 2018 г '
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library('tree') # деревья
+library('MASS')
+library('randomForest') # случайный лес
+library('gbm')
+```
+
+Согласно заданию, построим модели с помощью деревьев с: 
+
+-Непрерывной переменной
+
+-Категориальной переменной
+
+Начнем работу с данными Boston. Переменная, по которой строим деревья - medv.
+Построим дерево на обучающей выборке и посчитаем MSE.
+
+```{r data, message=F}
+data('Boston')
+set.seed(3)
+train <- sample(1:nrow(Boston), nrow(Boston)/2) # обучающая выборка -- 50%
+
+# обучаем модель
+tree.boston <- tree(medv ~ ., Boston, subset = train)
+summary(tree.boston)
+
+# визуализация
+plot(tree.boston)
+text(tree.boston, pretty = 0)
+yhat <- predict(tree.boston, newdata=Boston[-train, ])
+mse.test <- mean((yhat - train)^2)
+mse.test
+```
+
+Произведем обучение модели методом случайного леса.
+
+```{r random_forest, message=FALSE}
+set.seed(3)
+boston.test <- Boston[-train, "medv"]
+rf.boston <- randomForest(medv ~ ., data = Boston, subset = train,
+                          mtry = 6, importance = TRUE)
+# график результата
+plot(rf.boston) 
+# прогноз
+yhat.rf <- predict(rf.boston, newdata = Boston[-train, ])
+plot(yhat.rf, boston.test)
+# линия идеального прогноза
+abline(0, 1)
+# MSE на тестовой выборке
+mse.test <- mean((yhat.rf - boston.test)^2)
+mse.test
+```
+
+Ошибка 1ой модели равна 15,904.
+
+Построим модель с категориальным Y. Переменная medv принимает 0, если medv<=25 и 1, если medv>25.
+
+```{r category Y, message=F}
+High <- ifelse(Boston$medv <= 25, "0", "1")
+High
+# присоединяем к таблице данных
+Boston1 <- data.frame(Boston, High)
+str(Boston1)
+# модель бинарного дерева
+tree.boston1 <- tree(High ~ .-medv, Boston1)
+summary(tree.boston1)
+# график результата
+plot(tree.boston1) # ветви
+text(tree.boston1) # подписи
+
+```
+
+Построим модель на тестовой выборке.
+
+```{r test tree, message=F}
+# ядро генератора случайных чисел
+set.seed(3)
+
+# обучающая выборка
+train1 <- sample(1:nrow(Boston1), nrow(Boston1)/2)
+
+# тестовая выборка
+boston1.test <- Boston1[-train1,]
+#High.test <- High[-train1]
+
+# строим дерево на обучающей выборке
+tree.boston.test <- tree(High ~ . -medv, Boston1, subset = train1)
+summary(tree.boston.test)
+# график результата
+plot(tree.boston.test) # ветви
+text(tree.boston.test) # подписи
+# делаем прогноз
+tree.pred <- predict(tree.boston.test, boston1.test, type = "class")
+
+```
+
+Проведем обучение модели методом случайного леса.
+```{r random_forest2, message=F}
+# обучаем модель
+set.seed(3)
+rf.boston1 <- randomForest(High ~. -medv , data = Boston1, subset = train,
+                          mtry = 6, importance = TRUE)
+# график результата
+plot(rf.boston1) 
+# прогноз
+yhat.rf1 <- predict(rf.boston, newdata = Boston1[-train, ])
+boston11.test <- Boston1[-train, "High"]
+as.numeric(boston11.test)
+# MSE на тестовой выборке
+mse.test <- mean((yhat.rf1 - as.numeric(boston11.test)^2))
+mse.test
+# важность предикторов
+importance(rf.boston) # оценки
+
+varImpPlot(rf.boston) # графики
+
+```
+
+Ошибка в первом случае оказалась меньше чем во втором. Сейчас ошибка равна 20,564. Наибольшее влияние в модели оказывают такие показатели как rm (среднее количество комнат в доме) и lstat (более низкий статус населения (в процентах)).
